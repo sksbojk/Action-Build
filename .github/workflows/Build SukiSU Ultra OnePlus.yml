@@ -25,7 +25,7 @@ on:
           - oneplus_ace2_pro_b
           - oneplus_ace3_b
           - oneplus_open_b
-          - oneplus_nord_ce4_v
+          - oneplus_nord_ce4_b
           - oneplus_12_b
           - oneplus_nord_ce4_lite_5g_v
           - oneplus_nord_4_b
@@ -122,11 +122,6 @@ on:
         description: "是否启用网络优化算法(BBR+ECN)？"
         required: true
         default: true
-      UNICODE_BYPASS:
-        type: boolean
-        description: "是否添加Unicode零宽绕过修复与内存优化补丁？"
-        required: true
-        default: false
       SCHED:
         type: boolean
         description: "是否添加风驰驱动1.0？"
@@ -135,6 +130,11 @@ on:
       ZRAM:
         type: boolean
         description: "是否添加更多ZRAM算法？"
+        required: true
+        default: false
+      XUS_FIX:
+        type: boolean
+        description: "是否阻止5US报错文件产生？"
         required: true
         default: false
       SUSFS_DEV:
@@ -314,7 +314,7 @@ jobs:
           echo "Selected FAST_BUILD: ${{ github.event.inputs.FAST_BUILD }}"
           echo "Selected SCHED: ${{ github.event.inputs.SCHED }}"
           echo "Selected ZRAM: ${{ github.event.inputs.ZRAM }}"
-          echo "Selected UNICODE_BYPASS: ${{ github.event.inputs.UNICODE_BYPASS }}"
+          echo "Selected XUS_FIX: ${{ github.event.inputs.XUS_FIX }}"
           echo "-----------------------"
 
       - name: Check Disk Space
@@ -720,6 +720,10 @@ jobs:
                 fi
               fi
             fi
+            if [ "${{ github.event.inputs.SUSFS_META }}" != "-1" ] && [ "${{ github.event.inputs.XUS_FIX }}" = "true" ]; then
+              cp ../../Action-Build/patches/No_5uS.patch ./
+              patch -p1 < No_5uS.patch || true
+            fi    
           fi
 
       # OGKI转换GKI，无需修改 dtbo 开机
@@ -738,23 +742,6 @@ jobs:
           echo "正在打OGKI转换GKI补丁"
           patch -p1 -F 3 < "${PATCH_DIR}/hmbird_patch.patch" || true
           echo "OGKI转换GKI_patch完成"
-
-      - name: Apply UNICODE_BYPASS and MEMORY_OPT
-        if: ${{ github.event.inputs.UNICODE_BYPASS == 'true' }}
-        run: |
-          PATCH_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Action-Build/patches"
-          cd kernel_workspace/kernel_platform/common
-          patch -p1 --forward < "${PATCH_DIR}/optimized_mem_operations.patch"
-          patch -p1 --forward < "${PATCH_DIR}/file_struct_8bytes_align.patch"
-          patch -p1 --forward < "${PATCH_DIR}/reduce_cache_pressure.patch"
-          if [ "$KV1" -lt 6 ]; then
-            patch -p1 --forward < "${PATCH_DIR}/clear_page_16bytes_align.patch"
-            patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_2_6.1-.patch" || true
-            patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1-.patch" || true
-          else
-            cat "${PATCH_DIR}/clear_page_16bytes_align.patch" | sed -e 's/SYM_FUNC_START_PI(clear_page)/SYM_FUNC_START_PI(__pi_clear_page)/' | patch -p1 -F3 --forward
-            patch -p1 --forward < "${PATCH_DIR}/unicode_bypass_fix_6.1+.patch" || true
-          fi
 
       - name: Apply ZRAM
         if: ${{ github.event.inputs.ZRAM == 'true' }}
